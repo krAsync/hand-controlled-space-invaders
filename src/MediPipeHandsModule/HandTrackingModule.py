@@ -50,12 +50,6 @@ class hand_detector():
         return lm_list
 
     def get_handedness(self):
-        """
-        Determines the handedness of the detected hands.
-
-        Returns:
-            A list of strings indicating the handedness of each detected hand ('Left' or 'Right').
-        """
         handedness_list = []
         if self.results.multi_hand_landmarks and self.results.multi_handedness:
             for hand_handedness in self.results.multi_handedness:
@@ -86,12 +80,15 @@ class hand_detector():
                     x_min, x_max = min(x_list), max(x_list)
                     y_min, y_max = min(y_list), max(y_list)
 
-                #add paddingmin 
-                    buffer = 20
-                    x_min = max(0, x_min - buffer)
-                    y_min = max(0, y_min - buffer)
-                    x_max = max(0, x_max + buffer)
-                    y_max = max(0, y_max + buffer)
+                #add padding
+                    width = x_max - x_min
+                    height = y_max - y_min
+                    buffer_x = int(width * 0.1)  # 10% padding
+                    buffer_y = int(height * 0.1) # 10% padding
+                    x_min = max(0, x_min - buffer_x)
+                    y_min = max(0, y_min - buffer_y)
+                    x_max = x_max + buffer_x
+                    y_max = y_max + buffer_y
                    
                     x_min_coord = min(x_list)
                     x_max_coord = max(x_list)
