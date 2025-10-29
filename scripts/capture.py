@@ -20,8 +20,6 @@ except ImportError as e:
     print(f'error importing HandTrackingModule: {e}')
 
 def normalize_landmarks(lm_list, bbox, handedness):
-
-
     normalized_landmarks = []
     if len(lm_list) != 0 and bbox:
         wrist = lm_list[0]  # Wrist is the first landmark
@@ -38,45 +36,40 @@ def normalize_landmarks(lm_list, bbox, handedness):
     return normalized_landmarks
     
 def write_data(data, hand, number):
-    if hand == 'left':
-        with open (data_path+'/numbers/left.csv', 'a') as f:
-            wr = csv.writer(f)
-            wr.writerow([number] + [item for sublist in data for item in sublist])
-    if hand == 'right':
-        with open (data_path+'/numbers/right.csv', 'a') as f:
-            wr = csv.writer(f)
-            wr.writerow([number] + [item for sublist in data for item in sublist])
+    with open (data_path+'/numbers/gestures.csv', 'a') as f:
+        wr = csv.writer(f)
+        wr.writerow([number, hand.lower()] + [item for sublist in data for item in sublist])
 
 def main():
     cap = cv2.VideoCapture(0)
     detector = hand_detector()
     pTime = 0
-    dump_right = []
-    dump_left = []
+    landmarks_to_save = []
+    hand_to_save = None
+
     # main loop
     while True:
         success, img = cap.read()
 
         if success:
+            img = cv2.flip(img, 1)
             img = detector.find_hands(img)
             handedness = detector.get_handedness()
 
-            if handedness:
-                dump_left = []
-                dump_right = []
-                for i, hand in enumerate(handedness):
-                    lm_list, bbox = detector.get_bbox_location(img, hand_no=i)
-                    if len(lm_list) != 0 and bbox:
-                        normalized_landmarks = normalize_landmarks(lm_list, bbox, hand)
-                        if normalized_landmarks:
-                            for landmark_n in normalized_landmarks:
-                                if hand:
-                                    if hand.lower() == 'left':
-                                        dump_left.append(landmark_n)
-                                    else:
-                                        dump_right.append(landmark_n)
+            landmarks_to_save = []
+            hand_to_save = None
 
-            img = cv2.flip(img, 1)
+            if handedness:
+                # Only process the first detected hand
+                hand = handedness[0]
+                lm_list, bbox, mid = detector.get_bbox_location(img, hand_no=0)
+                if len(lm_list) != 0 and bbox:
+                    img = cv2.putText(img, hand, (bbox[0] + bbox[2] + 10, bbox[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+                    normalized_landmarks = normalize_landmarks(lm_list, bbox, hand)
+                    if normalized_landmarks:
+                        landmarks_to_save = normalized_landmarks
+                        hand_to_save = hand
+
             cv2.imshow('hand capture', img)
             key = cv2.waitKey(1) & 0xFF
 
@@ -87,12 +80,9 @@ def main():
                 num = int(chr(key))
                 if num == 0:
                     num = 10
-                if len(dump_left) != 0:
-                    write_data(dump_left, 'left', num)
-                    print(f"Saved left hand data for number {num}")
-                elif len(dump_right) != 0:
-                    write_data(dump_right, 'right', num)
-                    print(f"Saved right hand data for number {num}")
+                if landmarks_to_save and hand_to_save:
+                    write_data(landmarks_to_save, hand_to_save, num)
+                    print(f"Saved {hand_to_save} hand data for number {num}")
                 else:
                     print('no landmarks to save')
 

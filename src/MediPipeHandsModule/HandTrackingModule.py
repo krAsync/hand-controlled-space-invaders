@@ -105,7 +105,9 @@ class hand_detector():
                     idd, minyx, minyy = lm_min_y
                     idd, maxxx, maxxy = lm_max_x
                     idd, maxyx, maxyy = lm_max_y
+                    
 
+                    mid = [(x_max - x_min)/2,(y_max - y_min)/2]
 
 
 
@@ -117,8 +119,8 @@ class hand_detector():
                         cv2.line(img, (minxx, minxy), (maxxx, maxxy), (255,0,255), 2)
                         cv2.line(img, (minyx, minyy), (maxyx, maxyy), (255,0,255), 2)
 
-                    return lm_list, bbox
-        return lm_list, bbox
+                    return lm_list, bbox, mid
+        return lm_list, bbox, mid
 
 
 def main():

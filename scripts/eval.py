@@ -5,6 +5,7 @@ import sys
 import csv
 import joblib
 import numpy as np
+import pandas as pd
 
 #get path to src
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +17,7 @@ data_path = os.path.join(project_root, 'data')
 if src_path not in sys.path:
     sys.path.append(src_path)
 
-model = joblib.load('../models/random_forest01.pkl')
+model = joblib.load('../models/gesture_model.pkl')
 
 try:
     from MediPipeHandsModule.HandTrackingModule import hand_detector
@@ -24,8 +25,6 @@ except ImportError as e:
     print(f'error importing HandTrackingModule: {e}')
 
 def normalize_landmarks(lm_list, bbox, handedness):
-
-
     normalized_landmarks = []
     if len(lm_list) != 0 and bbox:
         wrist = lm_list[0]  # Wrist is the first landmark
@@ -41,68 +40,48 @@ def normalize_landmarks(lm_list, bbox, handedness):
                 print(f"Error processing joint: {joint}, error: {e}")
     return normalized_landmarks
     
-def write_data(data, hand, number):
-    if hand == 'left':
-        with open (data_path+'/numbers/left.csv', 'a') as f:
-            wr = csv.writer(f)
-            wr.writerow([number] + [item for sublist in data for item in sublist])
-    if hand == 'right':
-        with open (data_path+'/numbers/right.csv', 'a') as f:
-            wr = csv.writer(f)
-            wr.writerow([number] + [item for sublist in data for item in sublist])
 
-    def eval(features, hand, draw=True):
-        X_new = np.array(features).reshape(1, -1)
-        
+def predict_gesture(features, model):
+    X_new = np.array(features).reshape(1, -1)
+    label = model.predict(X_new)[0]
+    return label
 
 def main():
     cap = cv2.VideoCapture(0)
     detector = hand_detector()
     pTime = 0
-    dump_right = []
-    dump_left = []
     # main loop
     while True:
         success, img = cap.read()
 
         if success:
+            img = cv2.flip(img, 1)
             img = detector.find_hands(img)
             handedness = detector.get_handedness()
 
             if handedness:
-                dump_left = []
-                dump_right = []
                 for i, hand in enumerate(handedness):
-                    lm_list, bbox = detector.get_bbox_location(img, hand_no=i)
+                    lm_list, bbox, mid = detector.get_bbox_location(img, hand_no=i)
                     if len(lm_list) != 0 and bbox:
                         normalized_landmarks = normalize_landmarks(lm_list, bbox, hand)
                         if normalized_landmarks:
-                            for landmark_n in normalized_landmarks:
-                                if hand:
-                                    if hand.lower() == 'left':
-                                        dump_left.append(landmark_n)
-                                    else:
-                                        dump_right.append(landmark_n)
+                            landmark_features = [item for sublist in normalized_landmarks for item in sublist]
+                            
+                            # Encode handedness: left=0, right=1
+                            hand_encoded = 0 if hand.lower() == 'left' else 1
+                            
+                            features = [hand_encoded] + landmark_features
 
-            img = cv2.flip(img, 1)
+                            if len(features) == 43: # 1 for hand + 42 for landmarks
+                                label = predict_gesture(features, model)
+                                print(f"Predicted {hand} Label: {label}")
+                                img = cv2.putText(img, str(label), (bbox[0] + bbox[2] + 10, bbox[1] + 20),cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,255), 2, cv2.LINE_AA)
+
             cv2.imshow('hand capture', img)
             key = cv2.waitKey(1) & 0xFF
-
+            
             if key == ord('q'):
                 break
-            
-            if ord('0') <= key <= ord('9'):
-                num = int(chr(key))
-                if num == 0:
-                    num = 10
-                if len(dump_left) != 0:
-                    write_data(dump_left, 'left', num)
-                    print(f"Saved left hand data for number {num}")
-                elif len(dump_right) != 0:
-                    write_data(dump_right, 'right', num)
-                    print(f"Saved right hand data for number {num}")
-                else:
-                    print('no landmarks to save')
 
     cap.release()
     cv2.destroyAllWindows()
