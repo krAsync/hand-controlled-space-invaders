@@ -10,8 +10,6 @@ pygame.init()
 # Camera setup
 cap = cv2.VideoCapture(0)
 detector = hand_detector()
-CAM_WIDTH = 400  # Camera window width
-CAM_HEIGHT = 300  # Camera window height
 
 # Screen dimensions
 infoObject = pygame.display.Info()
@@ -56,22 +54,6 @@ def gameLoop():
     clock = pygame.time.Clock()
 
     while not game_over:
-        success, img = cap.read()
-        img = detector.find_hands(img)
-        lm_list, bbox, mid = detector.get_bbox_location(img)
-        while game_close:
-            SCREEN.fill(BLACK)
-            message("You Lost! Press Q-Quit or C-Play Again", RED)
-            pygame.display.update()
-
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q:
-                        game_over = True
-                        game_close = False
-                    if event.key == pygame.K_c:
-                        gameLoop()
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 game_over = True
@@ -89,6 +71,10 @@ def gameLoop():
                     y1_change = SNAKE_BLOCK
                     x1_change = 0
 
+        success, img = cap.read()
+        img = detector.find_hands(img)
+        lm_list, bbox, mid = detector.get_bbox_location(img)
+
         if x1 >= SCREEN_WIDTH or x1 < 0 or y1 >= SCREEN_HEIGHT or y1 < 0:
             game_close = True
 
@@ -101,8 +87,8 @@ def gameLoop():
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img = np.rot90(img)
             frame = pygame.surfarray.make_surface(img)
-            frame = pygame.transform.scale(frame, (CAM_WIDTH, CAM_HEIGHT))
-            SCREEN.blit(frame, (SCREEN_WIDTH - CAM_WIDTH, 0))
+            frame = pygame.transform.scale(frame, (400, 300))
+            SCREEN.blit(frame, (SCREEN_WIDTH - 400, 0))
 
         pygame.draw.rect(SCREEN, RED, [food_x, food_y, SNAKE_BLOCK, SNAKE_BLOCK])
 
@@ -123,11 +109,8 @@ def gameLoop():
         pygame.display.update()
 
         if x1 == food_x and y1 == food_y:
-            while True:
-                food_x = round(random.randrange(0, SCREEN_WIDTH - SNAKE_BLOCK) / 10.0) * 10.0
-                food_y = round(random.randrange(0, SCREEN_HEIGHT - SNAKE_BLOCK) / 10.0) * 10.0
-                if not (food_x >= SCREEN_WIDTH - CAM_WIDTH and food_y <= CAM_HEIGHT):
-                    break
+            food_x = round(random.randrange(0, SCREEN_WIDTH - SNAKE_BLOCK) / 10.0) * 10.0
+            food_y = round(random.randrange(0, SCREEN_HEIGHT - SNAKE_BLOCK) / 10.0) * 10.0
             length_of_snake += 1
 
         clock.tick(SNAKE_SPEED)

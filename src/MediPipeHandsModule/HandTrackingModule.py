@@ -64,6 +64,7 @@ class hand_detector():
         y_list = []
 
         bbox = None
+        mid = None
         
         if self.results.multi_hand_landmarks:
             for hand_index, my_hand in enumerate(self.results.multi_hand_landmarks):
