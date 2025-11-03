@@ -146,19 +146,19 @@ class Game:
                     print(f"Detected gesture: {gesture}")
                     x, y, w, h = bbox
                     cv2.putText(img, str(gesture[0]), (x + w + 10, y + 20), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
-                if gesture == 1: # Up
+                if gesture[0] == 1: # Up
                     if self.snake.y1_change != self.SNAKE_BLOCK:
                         self.snake.y1_change = -self.SNAKE_BLOCK
                         self.snake.x1_change = 0
-                elif gesture == 2: # Left
+                elif gesture[0] == 2: # Left
                     if self.snake.x1_change != self.SNAKE_BLOCK:
                         self.snake.x1_change = -self.SNAKE_BLOCK
                         self.snake.y1_change = 0
-                elif gesture == 3: # Down
+                elif gesture[0] == 3: # Down
                     if self.snake.y1_change != -self.SNAKE_BLOCK:
                         self.snake.y1_change = self.SNAKE_BLOCK
                         self.snake.x1_change = 0
-                elif gesture == 4: # Right
+                elif gesture[0] == 4: # Right
                     if self.snake.x1_change != -self.SNAKE_BLOCK:
                         self.snake.x1_change = self.SNAKE_BLOCK
                         self.snake.y1_change = 0
