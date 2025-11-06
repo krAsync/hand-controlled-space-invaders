@@ -1,6 +1,7 @@
 import pygame
 import random
 import cv2
+import json
 from src.MediPipeHandsModule.HandTrackingModule import hand_detector
 from src.MediPipeHandsModule.GestureEvaluator import GestureEvaluator
 import collections
@@ -33,7 +34,7 @@ class Player(pygame.sprite.Sprite):
 
     def shoot(self, all_sprites, bullets):
         now = pygame.time.get_ticks()
-        if now - self.last_shot_time > self.bullet_cooldown:
+        if now - self.last_shot_time > 1000:
             self.last_shot_time = now
             bullet = Bullet(self.rect.centerx, self.rect.top)
             all_sprites.add(bullet)
@@ -71,7 +72,7 @@ class Bullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        self.speed = -10
+        self.speed = -20
 
     def update(self):
         self.rect.y += self.speed
@@ -87,12 +88,29 @@ class AlienBullet(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        self.speed = 10
+        self.speed = 20
 
     def update(self):
         self.rect.y += self.speed
         if self.rect.y > self.screen_height:
             self.kill()
+
+class PlatformBlock(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface([20, 20])
+        self.image.fill((0, 255, 0))  # Green
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+
+class Platform(pygame.sprite.Group):
+    def __init__(self, x, y):
+        super().__init__()
+        for i in range(5):
+            for j in range(3):
+                block = PlatformBlock(x + i * 20, y + j * 20)
+                self.add(block)
 
 # --- Game Class ---
 
@@ -123,16 +141,31 @@ class Game:
         self.aliens = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.alien_bullets = pygame.sprite.Group()
+        self.platforms = pygame.sprite.Group()
+
+        self.create_platforms()
 
         self.alien_direction = 1  # 1 for right, -1 for left
         self.alien_speed = 2
         self.alien_move_down_amount = 10
         self.score = 0
+        self.level = 1
 
-        self.alien_shoot_cooldown = 250
+        self.alien_shoot_cooldown = 1000
         self.last_alien_shot_time = 0
 
         self.clock = pygame.time.Clock()
+
+    def create_platforms(self):
+        num_platforms = 4
+        platform_width = 5 * 20  # 5 blocks * 20 pixels per block
+        total_platforms_width = num_platforms * platform_width
+        spacing = (self.SCREEN_WIDTH - total_platforms_width) / (num_platforms + 1)
+        for i in range(num_platforms):
+            platform_x = spacing * (i + 1) + i * platform_width
+            platform = Platform(platform_x, self.SCREEN_HEIGHT - 150)
+            self.platforms.add(platform)
+            self.all_sprites.add(platform)
 
     def create_aliens(self):
         for row in range(5):
@@ -150,33 +183,108 @@ class Game:
                 self.all_sprites.add(alien)
                 self.aliens.add(alien)
 
-    def message(self, msg, color):
+    def message(self, msg, color, y_offset=0):
         mesg = self.FONT.render(msg, True, color)
-        self.SCREEN.blit(mesg, [self.SCREEN_WIDTH / 2 - mesg.get_width() / 2, self.SCREEN_HEIGHT / 2 - mesg.get_height() / 2])
+        self.SCREEN.blit(mesg, [self.SCREEN_WIDTH / 2 - mesg.get_width() / 2, self.SCREEN_HEIGHT / 2 - mesg.get_height() / 2 + y_offset])
 
     def draw_score(self):
         score_mesg = self.FONT.render(f"Score: {self.score}", True, self.WHITE)
         self.SCREEN.blit(score_mesg, [10, 10])
+
+    def draw_level(self):
+        level_mesg = self.FONT.render(f"Level: {self.level}", True, self.WHITE)
+        self.SCREEN.blit(level_mesg, [10, 50])
+
+
+
+    def input_text(self, prompt):
+        player_name = ""
+        input_active = True
+        while input_active:
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        input_active = False
+                    elif event.key == pygame.K_BACKSPACE:
+                        player_name = player_name[:-1]
+                    elif len(player_name) < 3:
+                        player_name += event.unicode
+            
+            self.SCREEN.fill(self.BLACK)
+            self.message(prompt, self.WHITE, -50)
+            self.message(player_name, self.WHITE, 50)
+            pygame.display.update()
+        return player_name
+
+    def update_leaderboard(self):
+        leaderboard = []
+        try:
+            with open("leaderboard.json", "r") as f:
+                leaderboard = json.load(f)
+        except FileNotFoundError:
+            pass
+
+        is_top_score = False
+        if len(leaderboard) < 5 or self.score > leaderboard[-1]["score"]:
+            is_top_score = True
+
+        if is_top_score:
+            player_name = self.input_text("New High Score! Enter your name (3 chars max):")
+            if not player_name:
+                player_name = "AAA"
+            leaderboard.append({"name": player_name, "score": self.score})
+            leaderboard = sorted(leaderboard, key=lambda x: x["score"], reverse=True)
+            leaderboard = leaderboard[:5]
+
+            with open("leaderboard.json", "w") as f:
+                json.dump(leaderboard, f, indent=4)
+
+    def display_leaderboard(self):
+        self.SCREEN.fill(self.BLACK)
+        self.message("Leaderboard", self.WHITE)
+
+        leaderboard = []
+        try:
+            with open("leaderboard.json", "r") as f:
+                leaderboard = json.load(f)
+        except FileNotFoundError:
+            pass
+
+        y_offset = 100
+        for entry in leaderboard:
+            score_text = f"{entry['name']}: {entry['score']}"
+            score_mesg = self.FONT.render(score_text, True, self.WHITE)
+            self.SCREEN.blit(score_mesg, [self.SCREEN_WIDTH / 2 - score_mesg.get_width() / 2, self.SCREEN_HEIGHT / 2 - score_mesg.get_height() / 2 + y_offset])
+            y_offset += 50
+        
+        self.message("Press Q-Quit or C-Play Again", (255, 255, 255), y_offset=y_offset+50)
+
 
     def reset_game(self):
         self.all_sprites.empty()
         self.aliens.empty()
         self.bullets.empty()
         self.alien_bullets.empty()
+        self.platforms.empty()
 
         self.score = 0
         self.player = Player(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
         self.all_sprites.add(self.player)
         self.create_aliens()
+        self.create_platforms()
+
     def run(self):
         game_over = False
         game_close = False
         self.create_aliens()
+        leaderboard_updated = False
 
         while not game_over:
             while game_close:
-                self.SCREEN.fill(self.BLACK)
-                self.message("You Lost! Press Q-Quit or C-Play Again", self.WHITE)
+                if not leaderboard_updated:
+                    self.update_leaderboard()
+                    leaderboard_updated = True
+                self.display_leaderboard()
                 pygame.display.update()
 
                 for event in pygame.event.get():
@@ -187,6 +295,7 @@ class Game:
                         if event.key == pygame.K_c:
                             self.reset_game()
                             game_close = False
+                            leaderboard_updated = False
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -240,6 +349,10 @@ class Game:
                 for alien in aliens_hit:
                     self.score += alien.points
 
+            pygame.sprite.groupcollide(self.alien_bullets, self.platforms, True, True)
+
+            pygame.sprite.groupcollide(self.aliens, self.platforms, False, True)
+
             player_alien_collisions = pygame.sprite.spritecollide(self.player, self.aliens, False)
             if player_alien_collisions:
                 game_close = True
@@ -250,10 +363,12 @@ class Game:
                     break
             
             if not self.aliens:
-                self.message("You Win! Press Q-Quit or C-Play Again", self.WHITE)
+                self.level += 1
+                self.alien_speed += 1
+                self.create_aliens()
+                self.message(f"Level {self.level}", self.WHITE)
                 pygame.display.update()
-                pygame.time.wait(2000)
-                game_close = True
+                pygame.time.wait(1000)
 
             # Alien shooting
             now = pygame.time.get_ticks()
@@ -273,6 +388,7 @@ class Game:
             self.SCREEN.fill(self.BLACK)
             self.all_sprites.draw(self.SCREEN)
             self.draw_score()
+            self.draw_level()
 
             # Display webcam feed
             if success:

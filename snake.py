@@ -1,6 +1,31 @@
 import collections
 import pygame
+import math
 import random
+import pygame
+
+import json
+
+LEADERBOARD_FILE = 'leaderboard.json'
+
+def load_leaderboard():
+    try:
+        with open(LEADERBOARD_FILE, 'r') as file:
+            leaderboard = json.load(file)
+            if leaderboard is None:
+                return []
+            return leaderboard
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        print(f"Error loading leaderboard: {e}")
+        return []
+
+def save_leaderboard(leaderboard):
+    with open(LEADERBOARD_FILE, 'w') as file:
+        json.dump(leaderboard, file, indent=4)
+
+
 import cv2
 import numpy as np
 from src.MediPipeHandsModule.HandTrackingModule import hand_detector
@@ -95,25 +120,37 @@ class Game:
         mesg = self.FONT.render(msg, True, color)
         self.SCREEN.blit(mesg, [self.SCREEN_WIDTH / 6, self.SCREEN_HEIGHT / 3])
 
-    def run(self):
+    def draw_leaderboard(self, leaderboard, current_score):
+        self.SCREEN.fill(self.BLACK)
+        leaderboard_title = self.FONT.render("Leaderboard", True, self.WHITE)
+        self.SCREEN.blit(leaderboard_title, (self.SCREEN_WIDTH / 2 - leaderboard_title.get_width() / 2, 50))
+
+        score_text = self.FONT.render(f"Your Score: {current_score}", True, self.WHITE)
+        self.SCREEN.blit(score_text, (self.SCREEN_WIDTH / 2 - score_text.get_width() / 2, 120))
+
+        y_offset = 200
+        for i, entry in enumerate(leaderboard):
+            entry_text = self.FONT.render(f"{i+1}. {entry['name']} - {entry['score']}", True, self.WHITE)
+            self.SCREEN.blit(entry_text, (self.SCREEN_WIDTH / 2 - entry_text.get_width() / 2, y_offset))
+            y_offset += 40
+        pygame.display.update()
+
+        waiting_for_input = True
+        while waiting_for_input:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    waiting_for_input = False
+
+    def game_loop(self):
         game_over = False
         game_close = False
 
         while not game_over:
-            while game_close:
-                self.SCREEN.fill(self.BLACK)
-                self.message("You Lost! Press Q-Quit or C-Play Again", self.RED)
-                pygame.display.update()
-
-                for event in pygame.event.get():
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_q:
-                            game_over = True
-                            game_close = False
-                        if event.key == pygame.K_c:
-                            self.snake = Snake(self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.SNAKE_BLOCK)
-                            self.food = Food(self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.SNAKE_BLOCK)
-                            game_close = False
+            if game_close:
+                return self.snake.length_of_snake - 1
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -196,9 +233,48 @@ class Game:
 
             self.clock.tick(self.SNAKE_SPEED)
 
-        self.cap.release()
-        pygame.quit()
-        quit()
+    def run(self):
+        while True:
+            current_score = self.game_loop()
+            
+            leaderboard = load_leaderboard()
+
+            if len(leaderboard) < 5 or current_score > leaderboard[-1]['score']:
+                root = tk.Tk()
+                root.withdraw()
+                initials = simpledialog.askstring("Leaderboard", "Congratulations! You made it to the leaderboard!\nEnter your initials (max 3 characters):", parent=root)
+                root.destroy()
+
+                if initials and len(initials) <= 3:
+                    leaderboard.append({'name': initials.upper(), 'score': current_score})
+                    leaderboard.sort(key=lambda x: x['score'], reverse=True)
+                    leaderboard = leaderboard[:5]
+                    save_leaderboard(leaderboard)
+
+            self.draw_leaderboard(leaderboard, current_score)
+
+            self.SCREEN.fill(self.BLACK)
+            self.message("Press 'P' to Play Again or 'Q' to Quit", self.WHITE)
+            pygame.display.update()
+
+            waiting_for_input = True
+            while waiting_for_input:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.cap.release()
+                        pygame.quit()
+                        quit()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_q:
+                            self.cap.release()
+                            pygame.quit()
+                            quit()
+
+                        if event.key == pygame.K_p:
+                            waiting_for_input = False
+
+            self.snake = Snake(self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.SNAKE_BLOCK)
+            self.food = Food(self.SCREEN_WIDTH, self.SCREEN_HEIGHT, self.SNAKE_BLOCK)
 
 if __name__ == "__main__":
     game = Game()
