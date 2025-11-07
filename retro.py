@@ -31,7 +31,7 @@ class PacPlayer(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        self.direction = 0  # 0=right, 1=down, 2=left, 3=up
+        self.direction = 4  # 4=right
         self.speed = 4
         self.mouth_open = 0
         self.mouth_direction = 1
@@ -42,8 +42,13 @@ class PacPlayer(pygame.sprite.Sprite):
         center = self.size // 2
         # Animate mouth
         mouth_angle = 45 * (self.mouth_open / 10)
-        start_angle = math.radians(self.direction * 90 + mouth_angle)
-        end_angle = math.radians(self.direction * 90 + 360 - mouth_angle)
+        
+        # Map direction: 1=up, 2=left, 3=down, 4=right
+        angle_map = {1: 270, 2: 180, 3: 90, 4: 0}
+        base_angle = angle_map.get(self.direction, 0)
+        
+        start_angle = math.radians(base_angle + mouth_angle)
+        end_angle = math.radians(base_angle + 360 - mouth_angle)
         
         points = [(center, center)]
         for angle in [start_angle + i * 0.1 for i in range(int((end_angle - start_angle) / 0.1))]:
@@ -63,13 +68,13 @@ class PacPlayer(pygame.sprite.Sprite):
     def move(self, walls):
         old_x, old_y = self.rect.x, self.rect.y
         
-        if self.direction == 0:  # Right
+        if self.direction == 4:  # Right
             self.rect.x += self.speed
-        elif self.direction == 1:  # Down
+        elif self.direction == 3:  # Down
             self.rect.y += self.speed
         elif self.direction == 2:  # Left
             self.rect.x -= self.speed
-        elif self.direction == 3:  # Up
+        elif self.direction == 1:  # Up
             self.rect.y -= self.speed
             
         # Check collision with walls
@@ -86,7 +91,7 @@ class Ghost(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
         self.speed = 2
-        self.direction = random.randint(0, 3)
+        self.direction = random.randint(1, 4)
         self.change_direction_timer = 0
         self.draw()
         
@@ -107,23 +112,23 @@ class Ghost(pygame.sprite.Sprite):
     def update(self, walls):
         self.change_direction_timer += 1
         if self.change_direction_timer > 60:
-            self.direction = random.randint(0, 3)
+            self.direction = random.randint(1, 4)
             self.change_direction_timer = 0
             
         old_x, old_y = self.rect.x, self.rect.y
         
-        if self.direction == 0:
+        if self.direction == 4:  # Right
             self.rect.x += self.speed
-        elif self.direction == 1:
+        elif self.direction == 3:  # Down
             self.rect.y += self.speed
-        elif self.direction == 2:
+        elif self.direction == 2:  # Left
             self.rect.x -= self.speed
-        elif self.direction == 3:
+        elif self.direction == 1:  # Up
             self.rect.y -= self.speed
             
         if pygame.sprite.spritecollide(self, walls, False):
             self.rect.x, self.rect.y = old_x, old_y
-            self.direction = random.randint(0, 3)
+            self.direction = random.randint(1, 4)
 
 class Wall(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height):
@@ -232,16 +237,15 @@ class PacManGame:
             if len(self.recent_gestures) == self.recent_gestures.maxlen:
                 most_common = collections.Counter(self.recent_gestures).most_common(1)[0][0]
                 
-                if most_common == 2:  # Left
-                    self.player.direction = 2
-                elif most_common == 4:  # Right
-                    self.player.direction = 0
-                elif most_common == 3:  # Up (assuming gesture 3 is up)
-                    self.player.direction = 3
-                elif most_common == 5:  # Down (assuming gesture 5 is down)
-                    self.player.direction = 1
+                # 1=up, 2=left, 3=down, 4=right
+                if most_common in [1, 2, 3, 4]:
+                    self.player.direction = most_common
                     
         return success, img if success else None
+    
+    def draw_scanline(self):
+        for i in range(0, self.height, 4):
+            pygame.draw.line(self.screen, (10, 10, 10), (0, i), (self.width, i), 1)
     
     def run(self):
         clock = pygame.time.Clock()
@@ -282,6 +286,8 @@ class PacManGame:
             
             # Draw
             self.screen.fill((0, 0, 0))
+            pygame.draw.line(self.screen, (0, 255, 0), (0, 60), (self.width, 60), 2)
+            
             self.all_sprites.draw(self.screen)
             
             # Draw HUD
@@ -291,13 +297,20 @@ class PacManGame:
             lives_text = self.font.render(f"LIVES: {self.lives}", True, (255, 255, 255))
             self.screen.blit(lives_text, (self.width - 200, 20))
             
+            level_text = self.font.render(f"LVL: {self.level}", True, (255, 255, 255))
+            self.screen.blit(level_text, (self.width // 2 - 50, 20))
+            
+            # Scanlines
+            self.draw_scanline()
+            
             # Webcam
             if success and img is not None:
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 img_rgb = img_rgb.swapaxes(0, 1)
                 frame = pygame.surfarray.make_surface(img_rgb)
                 frame = pygame.transform.scale(frame, (240, 180))
-                self.screen.blit(frame, (self.width - 260, 60))
+                pygame.draw.rect(self.screen, (0, 255, 0), (self.width - 262, 78, 244, 184), 2)
+                self.screen.blit(frame, (self.width - 260, 80))
             
             pygame.display.flip()
             clock.tick(60)
@@ -403,7 +416,7 @@ class BreakoutGame:
         start_y = 100
         
         for row in range(5):
-            for col in range(12):
+            for col in range(20):
                 x = start_x + col * 80
                 y = start_y + row * 35
                 points = 50 - row * 10
@@ -432,6 +445,10 @@ class BreakoutGame:
                     self.paddle.move_right()
                     
         return success, img if success else None
+    
+    def draw_scanline(self):
+        for i in range(0, self.height, 4):
+            pygame.draw.line(self.screen, (10, 10, 10), (0, i), (self.width, i), 1)
     
     def run(self):
         clock = pygame.time.Clock()
@@ -494,12 +511,16 @@ class BreakoutGame:
             level_text = self.font.render(f"LVL: {self.level}", True, (255, 255, 255))
             self.screen.blit(level_text, (self.width // 2 - 50, 20))
             
+            # Scanlines
+            self.draw_scanline()
+            
             # Webcam
             if success and img is not None:
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 img_rgb = img_rgb.swapaxes(0, 1)
                 frame = pygame.surfarray.make_surface(img_rgb)
                 frame = pygame.transform.scale(frame, (240, 180))
+                pygame.draw.rect(self.screen, (0, 255, 0), (self.width - 262, 78, 244, 184), 2)
                 self.screen.blit(frame, (self.width - 260, 80))
             
             pygame.display.flip()
@@ -508,89 +529,166 @@ class BreakoutGame:
         return "quit"
 
 # ============================================
-# GAME 3: FROGGER-STYLE CROSSING GAME
+# GAME 3: SPACE INVADERS
 # ============================================
 
-class Frog(pygame.sprite.Sprite):
+class SpacePlayer(pygame.sprite.Sprite):
     def __init__(self, screen_width, screen_height):
         super().__init__()
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.size = 40
-        self.image = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-        self.draw_frog()
+        self.image = pygame.Surface((50, 40), pygame.SRCALPHA)
+        self.draw_player_ship()
         self.rect = self.image.get_rect()
-        self.start_x = screen_width // 2 - 20
-        self.start_y = screen_height - 60
-        self.rect.x = self.start_x
-        self.rect.y = self.start_y
-        self.move_distance = 50
-        
-    def draw_frog(self):
-        self.image.fill((0, 0, 0, 0))
-        # Body
-        pygame.draw.ellipse(self.image, (0, 200, 0), (5, 10, 30, 25))
-        # Eyes
-        pygame.draw.circle(self.image, (255, 255, 0), (12, 12), 6)
-        pygame.draw.circle(self.image, (255, 255, 0), (28, 12), 6)
-        pygame.draw.circle(self.image, (0, 0, 0), (12, 12), 3)
-        pygame.draw.circle(self.image, (0, 0, 0), (28, 12), 3)
-        # Legs
-        pygame.draw.circle(self.image, (0, 180, 0), (5, 30), 8)
-        pygame.draw.circle(self.image, (0, 180, 0), (35, 30), 8)
-        
-    def move_up(self):
-        if self.rect.y > 100:
-            self.rect.y -= self.move_distance
-            
-    def move_down(self):
-        if self.rect.y < self.screen_height - 60:
-            self.rect.y += self.move_distance
-            
-    def move_left(self):
-        if self.rect.x > 0:
-            self.rect.x -= self.move_distance
-            
-    def move_right(self):
-        if self.rect.x < self.screen_width - self.size:
-            self.rect.x += self.move_distance
-            
-    def reset(self):
-        self.rect.x = self.start_x
-        self.rect.y = self.start_y
+        self.rect.x = (self.screen_width - self.rect.width) // 2
+        self.rect.y = self.screen_height - self.rect.height - 20
+        self.speed = 8
+        self.bullet_cooldown = 400
+        self.last_shot_time = 0
 
-class Vehicle(pygame.sprite.Sprite):
-    def __init__(self, x, y, width, speed, color):
+    def draw_player_ship(self):
+        green = (0, 255, 0)
+        pygame.draw.rect(self.image, green, (22, 0, 6, 8))
+        pygame.draw.rect(self.image, green, (18, 8, 14, 8))
+        pygame.draw.rect(self.image, green, (10, 16, 30, 8))
+        pygame.draw.rect(self.image, green, (0, 24, 50, 16))
+
+    def move_left(self):
+        self.rect.x -= self.speed
+        if self.rect.x < 0:
+            self.rect.x = 0
+
+    def move_right(self):
+        self.rect.x += self.speed
+        if self.rect.x > self.screen_width - self.rect.width:
+            self.rect.x = self.screen_width - self.rect.width
+
+    def shoot(self, all_sprites, bullets):
+        now = pygame.time.get_ticks()
+        if now - self.last_shot_time > self.bullet_cooldown:
+            self.last_shot_time = now
+            bullet = SpaceBullet(self.rect.centerx, self.rect.top)
+            all_sprites.add(bullet)
+            bullets.add(bullet)
+
+class SpaceAlien(pygame.sprite.Sprite):
+    def __init__(self, x, y, alien_type, points):
         super().__init__()
-        self.image = pygame.Surface((width, 35))
-        self.image.fill(color)
-        pygame.draw.rect(self.image, (255, 255, 255), self.image.get_rect(), 2)
+        self.type = alien_type
+        self.points = points
+        self.animation_frame = 0
+        self.animation_timer = 0
+        self.animation_speed = 500
+        
+        if self.type == "red":
+            self.color = (255, 50, 50)
+        elif self.type == "yellow":
+            self.color = (255, 255, 0)
+        else:
+            self.color = (0, 255, 0)
+        
+        self.image = pygame.Surface((44, 32), pygame.SRCALPHA)
+        self.draw_alien()
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        self.speed = speed
-        self.screen_width = 0
-        
-    def update(self, screen_width):
-        self.screen_width = screen_width
-        self.rect.x += self.speed
-        if self.speed > 0 and self.rect.left > screen_width:
-            self.rect.right = 0
-        elif self.speed < 0 and self.rect.right < 0:
-            self.rect.left = screen_width
 
-class GoalZone(pygame.sprite.Sprite):
+    def draw_alien(self):
+        self.image.fill((0, 0, 0, 0))
+        if self.animation_frame == 0:
+            self.draw_alien_frame1()
+        else:
+            self.draw_alien_frame2()
+
+    def draw_alien_frame1(self):
+        pygame.draw.rect(self.image, self.color, (8, 0, 4, 4))
+        pygame.draw.rect(self.image, self.color, (32, 0, 4, 4))
+        pygame.draw.rect(self.image, self.color, (12, 4, 4, 4))
+        pygame.draw.rect(self.image, self.color, (28, 4, 4, 4))
+        pygame.draw.rect(self.image, self.color, (8, 8, 28, 12))
+        pygame.draw.rect(self.image, self.color, (8, 20, 4, 8))
+        pygame.draw.rect(self.image, self.color, (16, 20, 4, 4))
+        pygame.draw.rect(self.image, self.color, (24, 20, 4, 4))
+        pygame.draw.rect(self.image, self.color, (32, 20, 4, 8))
+
+    def draw_alien_frame2(self):
+        pygame.draw.rect(self.image, self.color, (8, 0, 4, 4))
+        pygame.draw.rect(self.image, self.color, (32, 0, 4, 4))
+        pygame.draw.rect(self.image, self.color, (12, 4, 4, 4))
+        pygame.draw.rect(self.image, self.color, (28, 4, 4, 4))
+        pygame.draw.rect(self.image, self.color, (8, 8, 28, 12))
+        pygame.draw.rect(self.image, self.color, (4, 20, 4, 8))
+        pygame.draw.rect(self.image, self.color, (16, 24, 4, 4))
+        pygame.draw.rect(self.image, self.color, (24, 24, 4, 4))
+        pygame.draw.rect(self.image, self.color, (36, 20, 4, 8))
+
+    def update(self):
+        self.animation_timer += 16
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.animation_frame = 1 - self.animation_frame
+            self.draw_alien()
+
+class SpaceBullet(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((80, 50))
+        self.image = pygame.Surface([3, 12])
+        self.image.fill((255, 255, 255))
+        self.rect = self.image.get_rect()
+        self.rect.centerx = x
+        self.rect.y = y
+        self.speed = -12
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.y < 0:
+            self.kill()
+
+class AlienBullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, screen_height, color):
+        super().__init__()
+        self.screen_height = screen_height
+        self.image = pygame.Surface([3, 12])
+        self.image.fill(color)
+        self.rect = self.image.get_rect()
+        self.rect.centerx = x
+        self.rect.y = y
+        self.speed = 8
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.y > self.screen_height:
+            self.kill()
+
+class PlatformBlock(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface([8, 8])
         self.image.fill((0, 255, 0))
-        pygame.draw.rect(self.image, (255, 255, 255), self.image.get_rect(), 3)
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        self.filled = False
 
-class FroggerGame:
+class Platform(pygame.sprite.Group):
+    def __init__(self, x, y):
+        super().__init__()
+        pattern = [
+            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1],
+            [1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1],
+            [1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1],
+        ]
+        for row_idx, row in enumerate(pattern):
+            for col_idx, cell in enumerate(row):
+                if cell == 1:
+                    block = PlatformBlock(x + col_idx * 8, y + row_idx * 8)
+                    self.add(block)
+
+class SpaceInvadersGame:
     def __init__(self, screen, cap, detector, gesture_evaluator):
         self.screen = screen
         self.width = screen.get_width()
@@ -599,49 +697,60 @@ class FroggerGame:
         self.detector = detector
         self.gesture_evaluator = gesture_evaluator
         self.recent_gestures = collections.deque(maxlen=5)
-        self.last_gesture = None
-        self.gesture_cooldown = 0
         
         self.font = pygame.font.SysFont('courier', 36, bold=True)
+        self.title_font = pygame.font.SysFont('courier', 72, bold=True)
         
-        self.frog = Frog(self.width, self.height)
-        self.vehicles = pygame.sprite.Group()
-        self.goals = pygame.sprite.Group()
+        self.player = SpacePlayer(self.width, self.height)
         self.all_sprites = pygame.sprite.Group()
+        self.all_sprites.add(self.player)
         
+        self.aliens = pygame.sprite.Group()
+        self.bullets = pygame.sprite.Group()
+        self.alien_bullets = pygame.sprite.Group()
+        self.platforms = pygame.sprite.Group()
+        
+        self.create_platforms()
+        
+        self.alien_direction = 1
+        self.alien_speed = 1.5
+        self.alien_move_down_amount = 16
         self.score = 0
-        self.lives = 3
         self.level = 1
+        self.lives = 3
         
-        self.setup_level()
+        self.alien_shoot_cooldown = 800
+        self.last_alien_shot_time = 0
         
-    def setup_level(self):
-        self.vehicles.empty()
-        self.all_sprites.empty()
-        self.all_sprites.add(self.frog)
-        
-        # Create traffic lanes
-        lanes = [
-            (150, 3, (255, 0, 0), 80),
-            (210, -4, (0, 0, 255), 100),
-            (270, 5, (255, 255, 0), 70),
-            (330, -3, (255, 0, 255), 90),
-            (390, 4, (0, 255, 255), 85),
-        ]
-        
-        for y, speed, color, width in lanes:
-            for i in range(4):
-                x = i * (self.width // 3)
-                vehicle = Vehicle(x, y, width, speed, color)
-                self.vehicles.add(vehicle)
-                self.all_sprites.add(vehicle)
-        
-        # Create goal zones
-        if not self.goals:
-            for i in range(5):
-                goal = GoalZone(100 + i * 200, 80)
-                self.goals.add(goal)
-                self.all_sprites.add(goal)
+        self.create_aliens()
+    
+    def create_platforms(self):
+        num_platforms = 4
+        platform_width = 16 * 8
+        total_platforms_width = num_platforms * platform_width
+        spacing = (self.width - total_platforms_width) / (num_platforms + 1)
+        for i in range(num_platforms):
+            platform_x = spacing * (i + 1) + i * platform_width
+            platform = Platform(platform_x, self.height - 180)
+            self.platforms.add(platform)
+            self.all_sprites.add(platform)
+    
+    def create_aliens(self):
+        start_x = (self.width - (10 * 60)) // 2
+        for row in range(5):
+            for col in range(11):
+                if row == 0:
+                    alien_type = "red"
+                    points = 30
+                elif row in [1, 2]:
+                    alien_type = "yellow"
+                    points = 20
+                else:
+                    alien_type = "green"
+                    points = 10
+                alien = SpaceAlien(start_x + col * 60, 80 + row * 50, alien_type, points)
+                self.all_sprites.add(alien)
+                self.aliens.add(alien)
     
     def handle_gestures(self):
         success, img = self.cap.read()
@@ -655,28 +764,21 @@ class FroggerGame:
                 gesture = self.gesture_evaluator.evaluate(lm_list, handedness_list[0], bbox)
                 self.recent_gestures.append(gesture[0])
 
-            if len(self.recent_gestures) == self.recent_gestures.maxlen and self.gesture_cooldown <= 0:
+            if len(self.recent_gestures) == self.recent_gestures.maxlen:
                 most_common = collections.Counter(self.recent_gestures).most_common(1)[0][0]
                 
-                if most_common != self.last_gesture:
-                    if most_common == 2:  # Left
-                        self.frog.move_left()
-                        self.gesture_cooldown = 15
-                    elif most_common == 4:  # Right
-                        self.frog.move_right()
-                        self.gesture_cooldown = 15
-                    elif most_common == 3:  # Up
-                        self.frog.move_up()
-                        self.gesture_cooldown = 15
-                    elif most_common == 5:  # Down
-                        self.frog.move_down()
-                        self.gesture_cooldown = 15
-                    self.last_gesture = most_common
-                    
-        if self.gesture_cooldown > 0:
-            self.gesture_cooldown -= 1
+                if most_common == 2:  # Left
+                    self.player.move_left()
+                elif most_common == 4:  # Right
+                    self.player.move_right()
+                elif most_common == 1:  # Shoot
+                    self.player.shoot(self.all_sprites, self.bullets)
                     
         return success, img if success else None
+    
+    def draw_scanline(self):
+        for i in range(0, self.height, 4):
+            pygame.draw.line(self.screen, (10, 10, 10), (0, i), (self.width, i), 1)
     
     def run(self):
         clock = pygame.time.Clock()
@@ -692,72 +794,105 @@ class FroggerGame:
             
             success, img = self.handle_gestures()
             
-            # Update vehicles
-            for vehicle in self.vehicles:
-                vehicle.update(self.width)
+            # Update
+            self.all_sprites.update()
             
-            # Check collision with vehicles
-            if pygame.sprite.spritecollide(self.frog, self.vehicles, False):
+            # Alien movement - check boundaries FIRST before moving
+            move_down = False
+            for alien in self.aliens:
+                if alien.rect.right >= self.width - 20 and self.alien_direction > 0:
+                    move_down = True
+                    break
+                if alien.rect.left <= 20 and self.alien_direction < 0:
+                    move_down = True
+                    break
+
+            if move_down:
+                self.alien_direction *= -1
+                for alien in self.aliens:
+                    alien.rect.y += self.alien_move_down_amount
+            else:
+                for alien in self.aliens:
+                    alien.rect.x += self.alien_speed * self.alien_direction
+            
+            # Collision detection
+            bullet_alien_collisions = pygame.sprite.groupcollide(self.bullets, self.aliens, True, True)
+            for bullet, aliens_hit in bullet_alien_collisions.items():
+                for alien in aliens_hit:
+                    self.score += alien.points
+            
+            pygame.sprite.groupcollide(self.alien_bullets, self.platforms, True, True)
+            pygame.sprite.groupcollide(self.bullets, self.platforms, True, True)
+            pygame.sprite.groupcollide(self.aliens, self.platforms, False, True)
+            
+            player_alien_collisions = pygame.sprite.spritecollide(self.player, self.aliens, False)
+            if player_alien_collisions:
                 self.lives -= 1
                 if self.lives <= 0:
                     return "menu"
-                self.frog.reset()
+                self.player.rect.x = self.width // 2
             
-            # Check if reached goal
-            goal_hit = pygame.sprite.spritecollide(self.frog, self.goals, False)
-            if goal_hit and not goal_hit[0].filled:
-                goal_hit[0].filled = True
-                goal_hit[0].image.fill((0, 150, 0))
-                self.score += 200
-                self.frog.reset()
-                
-                # Check if all goals filled
-                if all(goal.filled for goal in self.goals):
-                    self.level += 1
-                    for goal in self.goals:
-                        goal.filled = False
-                        goal.image.fill((0, 255, 0))
-                    # Increase difficulty
-                    for vehicle in self.vehicles:
-                        vehicle.speed *= 1.2
+            for alien in self.aliens:
+                if alien.rect.bottom >= self.player.rect.top:
+                    return "menu"
+            
+            if not self.aliens:
+                self.level += 1
+                self.alien_speed += 0.3
+                self.create_aliens()
+                self.screen.fill((0, 0, 0))
+                level_text = self.title_font.render(f"LEVEL {self.level}", True, (0, 255, 0))
+                self.screen.blit(level_text, (self.width // 2 - level_text.get_width() // 2, 
+                                             self.height // 2 - level_text.get_height() // 2))
+                pygame.display.update()
+                pygame.time.wait(2000)
+            
+            # Alien shooting
+            now = pygame.time.get_ticks()
+            if now - self.last_alien_shot_time > self.alien_shoot_cooldown and self.aliens:
+                self.last_alien_shot_time = now
+                random_alien = random.choice(self.aliens.sprites())
+                alien_bullet = AlienBullet(random_alien.rect.centerx, random_alien.rect.bottom,
+                                          self.height, random_alien.color)
+                self.all_sprites.add(alien_bullet)
+                self.alien_bullets.add(alien_bullet)
+            
+            # Player-alien bullet collision
+            player_hit = pygame.sprite.spritecollide(self.player, self.alien_bullets, True)
+            if player_hit:
+                self.lives -= 1
+                if self.lives <= 0:
+                    return "menu"
             
             # Draw
             self.screen.fill((0, 0, 0))
-            
-            # Draw road
-            pygame.draw.rect(self.screen, (50, 50, 50), (0, 140, self.width, 310))
-            for i in range(5):
-                y = 150 + i * 60
-                pygame.draw.line(self.screen, (255, 255, 255), (0, y), (self.width, y), 2)
-            
-            # Draw goal area
-            pygame.draw.rect(self.screen, (0, 100, 0), (0, 70, self.width, 60))
+            pygame.draw.line(self.screen, (0, 255, 0), (0, 60), (self.width, 60), 2)
             
             self.all_sprites.draw(self.screen)
             
-            # Draw frog on top
-            self.screen.blit(self.frog.image, self.frog.rect)
-            
             # HUD
-            pygame.draw.line(self.screen, (0, 255, 0), (0, 60), (self.width, 60), 2)
-            
             score_text = self.font.render(f"SCORE: {self.score:05d}", True, (255, 255, 255))
             self.screen.blit(score_text, (20, 20))
+            
+            level_text = self.font.render(f"LEVEL: {self.level}", True, (255, 255, 255))
+            self.screen.blit(level_text, (self.width // 2 - level_text.get_width() // 2, 20))
             
             lives_text = self.font.render(f"LIVES: {self.lives}", True, (255, 255, 255))
             self.screen.blit(lives_text, (self.width - 200, 20))
             
-            level_text = self.font.render(f"LVL: {self.level}", True, (255, 255, 255))
-            self.screen.blit(level_text, (self.width // 2 - 50, 20))
+            # Scanlines
+            self.draw_scanline()
             
             # Webcam
             if success and img is not None:
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 img_rgb = img_rgb.swapaxes(0, 1)
                 frame = pygame.surfarray.make_surface(img_rgb)
-                frame = pygame.transform.scale(frame, (240, 180))
-                pygame.draw.rect(self.screen, (0, 255, 0), (self.width - 262, 78, 244, 184), 2)
-                self.screen.blit(frame, (self.width - 260, 80))
+                frame = pygame.transform.scale(frame, (320, 240))
+                cam_x = self.width - 340
+                cam_y = 80
+                pygame.draw.rect(self.screen, (0, 255, 0), (cam_x - 2, cam_y - 2, 324, 244), 2)
+                self.screen.blit(frame, (cam_x, cam_y))
             
             pygame.display.flip()
             clock.tick(60)
@@ -789,10 +924,14 @@ class GameMenu:
         self.menu_items = [
             "1. PAC-MAN MAZE",
             "2. BRICK BREAKER",
-            "3. FROGGER CROSSING",
+            "3. SPACE INVADERS",
             "Q. QUIT"
         ]
         self.selected = 0
+    
+    def draw_scanline(self):
+        for i in range(0, self.height, 4):
+            pygame.draw.line(self.screen, (10, 10, 10), (0, i), (self.width, i), 1)
         
     def draw_menu(self):
         self.screen.fill((0, 0, 0))
@@ -821,7 +960,6 @@ class GameMenu:
             text_rect = text_surf.get_rect(center=(self.width // 2, y_start + i * 80))
             
             if i == self.selected:
-                # Draw selector
                 pygame.draw.rect(self.screen, (0, 255, 0), 
                                (text_rect.x - 20, text_rect.y - 5, 
                                 text_rect.width + 40, text_rect.height + 10), 3)
@@ -830,23 +968,24 @@ class GameMenu:
         
         # Instructions
         instructions = [
-            "GESTURE 2 = LEFT",
-            "GESTURE 4 = RIGHT", 
-            "GESTURE 3 = UP",
-            "GESTURE 5 = DOWN",
-            "GESTURE 1 = ACTION"
+            "CONTROLS:",
+            "GESTURE 1 = UP",
+            "GESTURE 2 = LEFT", 
+            "GESTURE 3 = DOWN",
+            "GESTURE 4 = RIGHT"
         ]
         
         y_pos = self.height - 250
-        inst_title = self.font.render("CONTROLS:", True, (0, 255, 0))
-        self.screen.blit(inst_title, (50, y_pos))
-        
         for i, inst in enumerate(instructions):
-            inst_surf = self.font.render(inst, True, (255, 255, 255))
-            self.screen.blit(inst_surf, (50, y_pos + 40 + i * 35))
+            color = (0, 255, 0) if i == 0 else (255, 255, 255)
+            inst_surf = self.font.render(inst, True, color)
+            self.screen.blit(inst_surf, (50, y_pos + i * 40))
         
         # Border
         pygame.draw.rect(self.screen, (0, 255, 0), (10, 10, self.width - 20, self.height - 20), 5)
+        
+        # Scanlines
+        self.draw_scanline()
         
         pygame.display.flip()
     
@@ -872,8 +1011,8 @@ class GameMenu:
                         if result == "quit":
                             running = False
                     elif event.key == pygame.K_3:
-                        result = FroggerGame(self.screen, self.cap, self.detector, 
-                                           self.gesture_evaluator).run()
+                        result = SpaceInvadersGame(self.screen, self.cap, self.detector, 
+                                                  self.gesture_evaluator).run()
                         if result == "quit":
                             running = False
                     elif event.key == pygame.K_UP:
@@ -892,8 +1031,8 @@ class GameMenu:
                             if result == "quit":
                                 running = False
                         elif self.selected == 2:
-                            result = FroggerGame(self.screen, self.cap, self.detector, 
-                                               self.gesture_evaluator).run()
+                            result = SpaceInvadersGame(self.screen, self.cap, self.detector, 
+                                                      self.gesture_evaluator).run()
                             if result == "quit":
                                 running = False
                         elif self.selected == 3:
